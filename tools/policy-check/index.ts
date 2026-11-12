@@ -10,7 +10,7 @@
  *  5. Every module ID named in architecture/model.md has a contract.
  *
  * SDR checks (§7 blueprint validation, §13.3):
- *  6. Every implementation/active/*/sources/*.md has frontmatter: id, kind=source-design,
+ *  6. Every implementation/active/<wave>/sources/*.md has frontmatter: id, kind=source-design,
  *     contract (resolving to an approved contract), contract_revision, targets (non-empty),
  *     depends_on, exports, verification.
  *  7. SDR IDs unique; every target file owned by exactly one SDR; depends_on resolve to SDR IDs; DAG acyclic.
@@ -25,11 +25,6 @@ const IMPL_DIR = path.join(ROOT, "implementation", "active");
 
 const FRONTS = new Set(["cli", "gui"]);
 const errors: string[] = [];
-
-interface Frontmatter {
-  data: Record<string, string | string[]>;
-  file: string;
-}
 
 function parseFrontmatter(text: string, file: string): Record<string, string | string[]> | null {
   if (!text.startsWith("---\n")) {
@@ -218,43 +213,30 @@ function checkSdrDag(sdrs: ParsedSdr[]): void {
       if (!known.has(dep)) errors.push(`${s.file}: depends_on '${dep}' does not resolve to any SDR`);
     }
   }
-  // acyclicity (DFS, iterative)
-  const visiting = new Set<string>();
-  const done = new Set<string>();
-  const stack: string[] = [];
-  for (const s of sdrs) {
-    if (done.has(s.id)) continue;
-    stack.push(s.id);
-    while (stack.length > 0) {
-      const cur = stack[stack.length - 1]!;
-      if (done.has(cur)) {
-        stack.pop();
-        continue;
-      }
-      if (visiting.has(cur)) {
-        errors.push(`implementation DAG has a cycle involving '${cur}'`);
-        stack.pop();
-        continue;
-      }
-      visiting.add(cur);
-      const node = known.get(cur);
-      let pushed = false;
-      if (node) {
-        for (const dep of node.dependsOn) {
-          const target = known.get(dep);
-          if (target && !done.has(dep) && !visiting.has(dep)) {
-            stack.push(dep);
-            pushed = true;
+  // three-color DFS (white/gray/black); gray target = back edge = cycle
+  const color = new Map<string, "gray" | "black">();
+  const reported = new Set<string>();
+  const visit = (id: string, trail: string[]): void => {
+    color.set(id, "gray");
+    const node = known.get(id);
+    if (node) {
+      for (const dep of node.dependsOn) {
+        const state = color.get(dep);
+        if (state === "gray") {
+          const key = `${id}->${dep}`;
+          if (!reported.has(key)) {
+            reported.add(key);
+            errors.push(`implementation DAG has a cycle: ${[...trail, id, dep].join(" -> ")}`);
           }
+        } else if (state === undefined) {
+          visit(dep, [...trail, id]);
         }
       }
-      if (!pushed) {
-        visiting.delete(cur);
-        done.add(cur);
-        stack.pop();
-      }
     }
-    visiting.clear();
+    color.set(id, "black");
+  };
+  for (const s of sdrs) {
+    if (!color.has(s.id)) visit(s.id, []);
   }
 }
 
