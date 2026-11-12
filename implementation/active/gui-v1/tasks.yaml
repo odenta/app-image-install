@@ -4,28 +4,28 @@ wave: W1
 tasks:
   - id: gui.config
     sdr: gui.config
-    status: pending
+    status: completed
     depends_on: []
 
 wave: W2
 tasks:
   - id: core.desktop.groups
     sdr: core.desktop.groups
-    status: pending
+    status: completed
     depends_on: []
 
 wave: W3
 tasks:
   - id: gui.main
     sdr: gui.main
-    status: pending
+    status: completed
     depends_on: [gui.config, core.desktop.groups]
 
 wave: W4
 tasks:
   - id: gui.view
     sdr: gui.view
-    status: pending
+    status: completed
     depends_on: [gui.main]
 
 verification:
