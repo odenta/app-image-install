@@ -1,6 +1,7 @@
 {
+  "extends": "./.hutch/devkit/tsconfig.json",
   "compilerOptions": {
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -10,11 +11,12 @@
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    // NOTE: exactOptionalPropertyTypes / noUncheckedIndexedAccess are off because the
+    // vendored Electrobun SDK (.hutch/devkit TS sources) does not compile with them;
+    // upstream template supports plain strict only. Revisit if d.ts files ship.
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["bun"]
   },
-  "include": ["src/**/*", "tests/**/*", "tools/**/*"]
+  "include": ["src/**/*", "tests/**/*", "tools/**/*", "electrobun.config.ts", "hutch.config.ts"]
 }

@@ -11,10 +11,13 @@
     "check": "tsc --noEmit",
     "lint": "eslint .",
     "test": "bun test",
-    "verify": "just verify"
+    "verify": "just verify",
+    "gui:dev": "hutch electrobun dev --watch",
+    "gui:build": "hutch electrobun build --env=stable"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "electrobun": "^2.0.6",
     "eslint": "^9.20.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.24.0"

@@ -27,3 +27,4 @@ Development model: specification-driven, human-governed, AI-implemented (AI Engi
 
 - Stateless: the filesystem is the database. One key everywhere: `<appId>.appimage` in `~/.local/Apps/` ↔ `<appId>.desktop` in applications dir ↔ `hicolor/<size>/apps/<appId>.*` icons.
 - `src/core/` = integration logic; `src/cli/` and `src/gui/` = thin fronts over it.
+- GUI toolchain: Electrobun 2.x via Hutch. `.hutch/` is generated — after a fresh clone run `hutch electrobun sync` before `just check` (tsconfig extends the devkit). Dev run: `bun run gui:dev`.
