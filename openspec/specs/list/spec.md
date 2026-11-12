@@ -33,3 +33,8 @@ Every listed app SHALL have a display name (entry Name, falling back to the appI
 
 - **WHEN** an image exists but its entry cannot be parsed
 - **THEN** the app is still listed with its appId as the name and a warning is emitted on stderr
+
+#### Scenario: Junk filenames tolerated
+
+- **WHEN** the applications directory contains files whose names cannot yield a valid entry id (e.g. a file literally named `.desktop`)
+- **THEN** those files are ignored and the remaining apps are still listed

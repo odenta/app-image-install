@@ -84,6 +84,8 @@ export async function removeIcons(iconThemeDir: string, appId: string): Promise<
     return err(fsError("list-themes", iconThemeDir, e));
   }
   let removed = 0;
+  // Exact names only — prefix matches like `<appId>-other.png` belong to other apps.
+  const targets = new Set([appId, `${appId}.png`, `${appId}.svg`, `${appId}.xpm`]);
   for (const size of sizes) {
     const appsDir = path.join(iconThemeDir, size, "apps");
     let files: string[];
@@ -93,13 +95,12 @@ export async function removeIcons(iconThemeDir: string, appId: string): Promise<
       continue; // not a size dir with apps/; ignore
     }
     for (const file of files) {
-      if (file === appId || file.startsWith(`${appId}.`)) {
-        try {
-          await rm(path.join(appsDir, file));
-          removed++;
-        } catch (e) {
-          return err(fsError("remove", path.join(appsDir, file), e));
-        }
+      if (!targets.has(file)) continue;
+      try {
+        await rm(path.join(appsDir, file));
+        removed++;
+      } catch (e) {
+        return err(fsError("remove", path.join(appsDir, file), e));
       }
     }
   }

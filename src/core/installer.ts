@@ -42,15 +42,16 @@ function isSafeAppId(appId: string): boolean {
   return appId !== "" && !appId.includes("/") && appId !== "." && appId !== ".." && path.basename(appId) === appId;
 }
 
-/** Copy hicolor/<size>/apps/<appId>.* into destDir/<size>/; returns whether anything was backed up. */
+/** Copy hicolor/<size>/apps/<appId>[.{png,svg,xpm}] into destDir/<size>/; returns whether anything was backed up. */
 async function backupIcons(themeDir: string, appId: string, destDir: string): Promise<boolean> {
   let any = false;
+  const targets = new Set([appId, `${appId}.png`, `${appId}.svg`, `${appId}.xpm`]);
   const sizes = await readdir(themeDir).catch(() => [] as string[]);
   for (const size of sizes) {
     const appsDir = path.join(themeDir, size, "apps");
     const files = await readdir(appsDir).catch(() => [] as string[]);
     for (const file of files) {
-      if (file !== appId && !file.startsWith(`${appId}.`)) continue;
+      if (!targets.has(file)) continue;
       const dest = path.join(destDir, size, file);
       await mkdir(path.dirname(dest), { recursive: true });
       await copyFile(path.join(appsDir, file), dest);

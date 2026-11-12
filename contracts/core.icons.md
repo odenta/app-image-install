@@ -2,7 +2,7 @@
 id: core.icons
 kind: module-contract
 status: approved
-revision: 1
+revision: 2
 architecture: core.icons
 dependencies:
   - core.result
@@ -39,7 +39,9 @@ export function installIcons(
 ): Promise<Result<InstalledIcon[], IconError>>;
 
 export function removeIcons(iconThemeDir: string, appId: string): Promise<Result<number, IconError>>;
-// Returns count of removed files.
+// Returns count of removed files. Matches exactly `<appId>` and `<appId>.{png,svg,xpm}`
+// (the only names installIcons ever creates) — prefix matches like `<appId>-other.png`
+// belong to different apps and are never touched.
 
 export function refreshCaches(): Promise<void>;
 // Best-effort: runs gtk-update-icon-cache and kbuildsycoca6 when present on PATH.

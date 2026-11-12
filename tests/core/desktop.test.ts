@@ -77,6 +77,16 @@ Icon=codium
     }
   });
 
+  test("duplicate [Desktop Entry] groups merge; first occurrence wins", () => {
+    const dup = "[Desktop Entry]\nName=First\nExec=a\n\n[Desktop Entry]\nName=Second\nIcon=b\n";
+    const r = parseDesktopEntry("x", dup);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.name).toBe("First");
+    expect(r.value.exec).toBe("a");
+    expect(r.value.icon).toBe("b"); // key unique to the second group is captured
+  });
+
   test("duplicate keys keep the first occurrence", () => {
     const r = parseDesktopEntry("x", "[Desktop Entry]\nName=First\nName=Second\nExec=a\nExec=b\n");
     expect(r.ok).toBe(true);
@@ -150,6 +160,20 @@ describe("core.desktop fs operations", () => {
       const again = await removeEntry(dir, "codium");
       expect(again.ok).toBe(true);
       if (again.ok) expect(again.value).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("listEntries skips junk filenames instead of throwing", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "desktop-test-"));
+    try {
+      await Bun.write(path.join(dir, ".desktop"), "[Desktop Entry]\nName=NoId\n");
+      await Bun.write(path.join(dir, "..desktop"), "[Desktop Entry]\nName=DotDot\n");
+      await writeEntry(dir, "good", renderDesktopEntry(fallbackEntry("good", "good.appimage"), { exec: "/x", icon: "x" }));
+      const listed = await listEntries(dir);
+      expect(listed.ok).toBe(true);
+      if (listed.ok) expect(listed.value.map((e) => e.id)).toEqual(["good"]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

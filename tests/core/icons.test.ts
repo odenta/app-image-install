@@ -72,6 +72,19 @@ describe("core.icons", () => {
     if (r.ok) expect(r.value).toBe(2); // 64x64 + 256x256 only, not codium-extra.png
   });
 
+  test("exact-match removal: similar appIds never lose each other's icons", async () => {
+    const { icons } = await seedExtraction();
+    await installIcons(themeDir, "thing", icons);
+    await installIcons(themeDir, "thing-0.1", icons);
+    // removing "thing" must not touch "thing-0.1" (prefix collision regression)
+    const r = await removeIcons(themeDir, "thing");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value).toBe(2);
+    const other = await removeIcons(themeDir, "thing-0.1");
+    if (other.ok) expect(other.value).toBe(2);
+  });
+
   test("refreshCaches resolves even with no cache tools on PATH", async () => {
     const prev = process.env.PATH;
     process.env.PATH = "/nonexistent";

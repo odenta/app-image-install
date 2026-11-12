@@ -41,9 +41,14 @@ const KNOWN_KEYS = new Set([
 ]);
 
 function assertSafeId(id: string): void {
-  if (id === "" || id.includes("/") || id === "." || id === ".." || path.basename(id) !== id) {
+  if (!isSafeEntryId(id)) {
     throw new Error(`programmer error: unsafe desktop entry id '${id}'`);
   }
+}
+
+/** Single-segment id check shared by all core modules. */
+export function isSafeEntryId(id: string): boolean {
+  return id !== "" && !id.includes("/") && id !== "." && id !== "..";
 }
 
 interface MutableGroup {
@@ -66,7 +71,11 @@ export function parseDesktopEntry(id: string, text: string): Result<DesktopEntry
     current?.lines.push(line);
   }
 
-  const main = groups.find((g) => g.name === "Desktop Entry") ?? null;
+  const mainGroups = groups.filter((g) => g.name === "Desktop Entry");
+  // A malformed file may repeat the main group: merge lines in order; first
+  // occurrence still wins per key during key parsing.
+  const main: MutableGroup | null =
+    mainGroups.length === 0 ? null : { name: "Desktop Entry", lines: mainGroups.flatMap((g) => g.lines) };
   const otherGroups = groups.filter((g) => g.name !== "Desktop Entry");
 
   const extra: Record<string, string> = {};
@@ -253,6 +262,7 @@ export async function listEntries(applicationsDir: string): Promise<Result<Deskt
   const out: DesktopEntryData[] = [];
   for (const file of files) {
     const id = file.slice(0, -".desktop".length);
+    if (!isSafeEntryId(id)) continue; // junk filenames are user data, not entries
     const parsed = await readEntry(applicationsDir, id);
     if (parsed.ok && parsed.value !== null) out.push(parsed.value);
     // unparseable or unreadable entries are skipped (resilience per SDR)

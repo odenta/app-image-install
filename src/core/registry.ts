@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { inspectAppImage } from "./appimage.ts";
-import { fallbackEntry, listEntries, readEntry, removeEntry, renderDesktopEntry, writeEntry } from "./desktop.ts";
+import { fallbackEntry, isSafeEntryId, listEntries, readEntry, removeEntry, renderDesktopEntry, writeEntry } from "./desktop.ts";
 import { installIcons, refreshCaches, removeIcons } from "./icons.ts";
 import type { XdgPaths } from "./paths.ts";
 import { err, ok, type Result } from "./result.ts";
@@ -49,8 +49,11 @@ export async function listInstalled(paths: XdgPaths): Promise<Result<InstalledAp
   for (const appId of ids.value) {
     const appImagePath = path.join(paths.appsDir, `${appId}.appimage`);
     const entryPath = path.join(paths.applicationsDir, `${appId}.desktop`);
-    const entry = await readEntry(paths.applicationsDir, appId);
-    const usable = entry.ok ? entry.value : null;
+    let usable = null;
+    if (isSafeEntryId(appId)) {
+      const entry = await readEntry(paths.applicationsDir, appId);
+      usable = entry.ok ? entry.value : null;
+    }
     apps.push({
       appId,
       name: usable?.name ?? appId,

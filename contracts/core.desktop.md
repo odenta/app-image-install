@@ -2,7 +2,7 @@
 id: core.desktop
 kind: module-contract
 status: approved
-revision: 2
+revision: 3
 architecture: core.desktop
 dependencies:
   - core.result
@@ -50,6 +50,9 @@ export interface EntryOverrides {
 export function renderDesktopEntry(data: DesktopEntryData, overrides: EntryOverrides): string;
 
 export function fallbackEntry(appId: string, sourceFileName: string): DesktopEntryData;
+
+/** Single-segment id check shared by all core modules (no '/', no '.', '..', or empty). */
+export function isSafeEntryId(id: string): boolean;
 // Name derived from sourceFileName: strip extension, replace [-_] with space, trim.
 
 export type EntryFsError = { readonly kind: "fs"; readonly op: string; readonly path: string; readonly cause: string };
@@ -62,7 +65,13 @@ export function removeEntry(applicationsDir: string, id: string): Promise<Result
 export function listEntries(applicationsDir: string): Promise<Result<DesktopEntryData[], EntryFsError>>;
 ```
 
-`renderDesktopEntry` emits a `[Desktop Entry]` group with `Type=Application`, preserved `Name`, `Comment`, `Categories`, `Terminal`, all `extra` keys, then `Exec` and `Icon` from overrides (overrides win over parsed values), then each of `otherGroups` verbatim (`[name]` + its lines). Ends with a trailing newline.
+`renderDesktopEntry` emits a `[Desktop Entry]` group containing `Type=Application`, preserved
+`Name`, `Comment`, `Categories`, `Terminal`, all `extra` keys, and `Exec`/`Icon` from overrides
+(overrides win over parsed values); **key order is unspecified**, then each of `otherGroups`
+verbatim (`[name]` + its lines). Ends with a trailing newline. If the input contains multiple
+`[Desktop Entry]` groups, their lines are merged in order of appearance (first occurrence wins
+per key). `listEntries` (and callers deriving ids from filenames) skip files whose derived id
+is not a safe single path segment instead of throwing.
 
 ## Preconditions
 
