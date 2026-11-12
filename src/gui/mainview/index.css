@@ -1,0 +1,82 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+
+h1 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+#add-button {
+  padding: 6px 14px;
+}
+
+main {
+  padding: 8px 16px;
+}
+
+#empty-state {
+  color: color-mix(in srgb, currentColor 60%, transparent);
+  text-align: center;
+  margin-top: 48px;
+}
+
+#app-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#app-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.app-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-version {
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  font-size: 0.85em;
+}
+
+.row-actions button {
+  margin-left: 6px;
+}
+
+#toast-area {
+  position: fixed;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
