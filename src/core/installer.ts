@@ -130,8 +130,7 @@ export async function installAppImage(
     }
     const rendered = renderDesktopEntry(entryData, { exec: targetPath, icon: iconName });
 
-    let entryPath: string;
-    entryPath = path.join(paths.applicationsDir, `${appId}.desktop`);
+    const entryPath = path.join(paths.applicationsDir, `${appId}.desktop`);
     const written = await writeEntry(paths.applicationsDir, appId, rendered);
     if (!written.ok) {
       await rollback();

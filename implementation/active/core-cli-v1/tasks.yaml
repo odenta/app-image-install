@@ -6,65 +6,65 @@ wave: W1
 tasks:
   - id: core.result.types
     sdr: core.result.types
-    status: pending
+    status: completed
     depends_on: []
 
 wave: W2
 tasks:
   - id: core.paths.resolve
     sdr: core.paths.resolve
-    status: pending
+    status: completed
     depends_on: [core.result.types]
   - id: core.desktop.entry
     sdr: core.desktop.entry
-    status: pending
+    status: completed
     depends_on: [core.result.types]
   - id: core.icons.install
     sdr: core.icons.install
-    status: pending
+    status: completed
     depends_on: [core.result.types]
   - id: testsupport.fixtures
     sdr: testsupport.fixtures
-    status: pending
+    status: completed
     depends_on: []
 
 wave: W3
 tasks:
   - id: core.appimage.inspect
     sdr: core.appimage.inspect
-    status: pending
+    status: completed
     depends_on: [core.paths.resolve, core.desktop.entry, core.icons.install, testsupport.fixtures]
 
 wave: W4
 tasks:
   - id: core.remove.app
     sdr: core.remove.app
-    status: pending
+    status: completed
     depends_on: [core.appimage.inspect]
 
 wave: W5
 tasks:
   - id: core.installer.pipeline
     sdr: core.installer.pipeline
-    status: pending
+    status: completed
     depends_on: [core.appimage.inspect]
   - id: core.registry.sync
     sdr: core.registry.sync
-    status: pending
+    status: completed
     depends_on: [core.appimage.inspect, core.remove.app]
 
 wave: W6
 tasks:
   - id: cli.run
     sdr: cli.run
-    status: pending
+    status: completed
     depends_on: [core.installer.pipeline, core.registry.sync]
 
 wave: W7
 tasks:
   - id: cli.main
     sdr: cli.main
-    status: pending
+    status: completed
     depends_on: [cli.run]
 
 verification:

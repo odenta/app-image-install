@@ -114,7 +114,6 @@ export async function inspectAppImage(
       const rel = relOf(root, abs);
       const ext = normalizeIconExt(abs);
       if (ext === null) continue;
-      const base = path.basename(rel);
       const atRoot = !rel.includes("/");
       const hicolorSize = sizeOfHicolorPath(rel);
       const underUsrIcons = rel.startsWith("usr/share/icons/");

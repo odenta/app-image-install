@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { listInstalled, sync } from "../../src/core/registry.ts";
 import { installAppImage } from "../../src/core/installer.ts";
 import { writeEntry, renderDesktopEntry, fallbackEntry } from "../../src/core/desktop.ts";
-import { installIcons } from "../../src/core/icons.ts";
+
 import { ensurePaths, resolvePaths, type XdgPaths } from "../../src/core/paths.ts";
 import { makeFixtureAppImage } from "../fixtures/make-fixture-appimage.ts";
 
