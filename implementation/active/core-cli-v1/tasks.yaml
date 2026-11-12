@@ -1,0 +1,72 @@
+# Execution state for wave core-cli-v1.
+# Statuses: pending | running | blocked | completed
+# A task is restartable from: its SDR (sources/<id>.md) + approved contract + this file.
+
+wave: W1
+tasks:
+  - id: core.result.types
+    sdr: core.result.types
+    status: pending
+    depends_on: []
+
+wave: W2
+tasks:
+  - id: core.paths.resolve
+    sdr: core.paths.resolve
+    status: pending
+    depends_on: [core.result.types]
+  - id: core.desktop.entry
+    sdr: core.desktop.entry
+    status: pending
+    depends_on: [core.result.types]
+  - id: core.icons.install
+    sdr: core.icons.install
+    status: pending
+    depends_on: [core.result.types]
+  - id: testsupport.fixtures
+    sdr: testsupport.fixtures
+    status: pending
+    depends_on: []
+
+wave: W3
+tasks:
+  - id: core.appimage.inspect
+    sdr: core.appimage.inspect
+    status: pending
+    depends_on: [core.paths.resolve, core.desktop.entry, core.icons.install, testsupport.fixtures]
+
+wave: W4
+tasks:
+  - id: core.remove.app
+    sdr: core.remove.app
+    status: pending
+    depends_on: [core.appimage.inspect]
+
+wave: W5
+tasks:
+  - id: core.installer.pipeline
+    sdr: core.installer.pipeline
+    status: pending
+    depends_on: [core.appimage.inspect]
+  - id: core.registry.sync
+    sdr: core.registry.sync
+    status: pending
+    depends_on: [core.appimage.inspect, core.remove.app]
+
+wave: W6
+tasks:
+  - id: cli.run
+    sdr: cli.run
+    status: pending
+    depends_on: [core.installer.pipeline, core.registry.sync]
+
+wave: W7
+tasks:
+  - id: cli.main
+    sdr: cli.main
+    status: pending
+    depends_on: [cli.run]
+
+verification:
+  gate: just verify
+  integration: tests/cli/run.test.ts end-to-end over temp dirs

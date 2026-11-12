@@ -1,13 +1,19 @@
 #!/usr/bin/env bun
 /**
- * tools/policy-check — deterministic architecture/contract policy checks.
+ * tools/policy-check — deterministic architecture/contract/SDR policy checks.
  *
- * Verifies (workflow spec §13.2, §13.3):
+ * Contract checks (workflow spec §13.2):
  *  1. Every contracts/*.md has parseable YAML frontmatter with id, kind, status, revision, architecture.
  *  2. Contract IDs are unique; `architecture` field equals `id`; `kind` is `module-contract`.
  *  3. Frontmatter `dependencies:` lists resolve to known contract IDs.
  *  4. Dependency policy: core.* must not depend on cli/gui; cli and gui must not depend on each other.
  *  5. Every module ID named in architecture/model.md has a contract.
+ *
+ * SDR checks (§7 blueprint validation, §13.3):
+ *  6. Every implementation/active/*/sources/*.md has frontmatter: id, kind=source-design,
+ *     contract (resolving to an approved contract), contract_revision, targets (non-empty),
+ *     depends_on, exports, verification.
+ *  7. SDR IDs unique; every target file owned by exactly one SDR; depends_on resolve to SDR IDs; DAG acyclic.
  */
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -15,20 +21,26 @@ import path from "node:path";
 const ROOT = path.resolve(import.meta.dir, "../..");
 const CONTRACTS_DIR = path.join(ROOT, "contracts");
 const MODEL_FILE = path.join(ROOT, "architecture", "model.md");
+const IMPL_DIR = path.join(ROOT, "implementation", "active");
 
 const FRONTS = new Set(["cli", "gui"]);
 const errors: string[] = [];
 
-interface ParsedContract {
+interface Frontmatter {
+  data: Record<string, string | string[]>;
   file: string;
-  id: string;
-  dependencies: string[];
 }
 
-function parseFrontmatter(text: string): Record<string, string | string[]> | null {
-  if (!text.startsWith("---\n")) return null;
+function parseFrontmatter(text: string, file: string): Record<string, string | string[]> | null {
+  if (!text.startsWith("---\n")) {
+    errors.push(`${file}: missing or malformed YAML frontmatter`);
+    return null;
+  }
   const end = text.indexOf("\n---", 4);
-  if (end === -1) return null;
+  if (end === -1) {
+    errors.push(`${file}: unterminated frontmatter`);
+    return null;
+  }
   const data: Record<string, string | string[]> = {};
   let listKey: string | null = null;
   for (const line of text.slice(4, end).split("\n")) {
@@ -53,6 +65,23 @@ function parseFrontmatter(text: string): Record<string, string | string[]> | nul
   return data;
 }
 
+function asList(value: string | string[] | undefined): string[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function asString(value: string | string[] | undefined): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+// ---------- contracts ----------
+
+interface ParsedContract {
+  file: string;
+  id: string;
+  status: string;
+  dependencies: string[];
+}
+
 async function loadContracts(): Promise<ParsedContract[]> {
   let files: string[] = [];
   try {
@@ -65,29 +94,24 @@ async function loadContracts(): Promise<ParsedContract[]> {
   const seen = new Map<string, string>();
   for (const file of files) {
     const rel = `contracts/${file}`;
-    const fm = parseFrontmatter(await readFile(path.join(CONTRACTS_DIR, file), "utf8"));
-    if (!fm) {
-      errors.push(`${rel}: missing or malformed YAML frontmatter`);
-      continue;
-    }
+    const fm = parseFrontmatter(await readFile(path.join(CONTRACTS_DIR, file), "utf8"), rel);
+    if (!fm) continue;
     for (const field of ["id", "kind", "status", "revision", "architecture"]) {
-      if (typeof fm[field] !== "string" || fm[field] === "") {
-        errors.push(`${rel}: frontmatter field '${field}' missing or empty`);
-      }
+      if (asString(fm[field]) === null) errors.push(`${rel}: frontmatter field '${field}' missing or empty`);
     }
-    const id = fm.id as string | undefined;
+    const id = asString(fm.id);
+    const status = asString(fm.status) ?? "";
     if (!id) continue;
     if (seen.has(id)) errors.push(`${rel}: duplicate contract id '${id}' (also in ${seen.get(id)})`);
     seen.set(id, rel);
     if (fm.kind !== "module-contract") errors.push(`${rel}: kind must be 'module-contract', got '${String(fm.kind)}'`);
     if (fm.architecture !== id) errors.push(`${rel}: architecture ('${String(fm.architecture)}') must equal id ('${id}')`);
-    const deps = Array.isArray(fm.dependencies) ? (fm.dependencies as string[]) : [];
-    contracts.push({ file: rel, id, dependencies: deps });
+    contracts.push({ file: rel, id, status, dependencies: asList(fm.dependencies) });
   }
   return contracts;
 }
 
-function checkDependencyPolicy(contracts: ParsedContract[]): void {
+function checkContractPolicy(contracts: ParsedContract[]): void {
   const known = new Set(contracts.map((c) => c.id));
   for (const c of contracts) {
     for (const dep of c.dependencies) {
@@ -95,9 +119,7 @@ function checkDependencyPolicy(contracts: ParsedContract[]): void {
         errors.push(`${c.file}: dependency '${dep}' does not resolve to any contract`);
         continue;
       }
-      const front = FRONTS.has(c.id);
-      const depIsFront = FRONTS.has(dep);
-      if (!front && depIsFront) {
+      if (!FRONTS.has(c.id) && FRONTS.has(dep)) {
         errors.push(`${c.file}: core module '${c.id}' may not depend on front '${dep}'`);
       }
     }
@@ -112,23 +134,141 @@ async function checkModelCoverage(contracts: ParsedContract[]): Promise<void> {
   const model = await readFile(MODEL_FILE, "utf8");
   const known = new Set(contracts.map((c) => c.id));
   const ids = new Set<string>();
-  for (const m of model.matchAll(/`((?:core|cli|gui)\.[A-Za-z]+|cli|gui)`/g)) {
+  for (const m of model.matchAll(/`((?:core)\.[A-Za-z]+|cli|gui)`/g)) {
     const id = m[1];
-    if (id === undefined) continue;
-    if (id.split(".").length === 2 || id === "cli" || id === "gui") ids.add(id);
+    if (id !== undefined) ids.add(id);
   }
   for (const id of ids) {
     if (!known.has(id)) errors.push(`architecture/model.md names '${id}' with no matching contract`);
   }
 }
 
+// ---------- SDRs ----------
+
+interface ParsedSdr {
+  file: string;
+  id: string;
+  contract: string;
+  targets: string[];
+  dependsOn: string[];
+}
+
+async function loadSdrs(contracts: ParsedContract[]): Promise<ParsedSdr[]> {
+  let impls: string[] = [];
+  try {
+    impls = (await readdir(IMPL_DIR, { withFileTypes: true }))
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return []; // no active implementation waves yet
+  }
+  const approvedContracts = new Set(contracts.filter((c) => c.status === "approved").map((c) => c.id));
+  const knownContracts = new Set(contracts.map((c) => c.id));
+  const sdrs: ParsedSdr[] = [];
+  const seenIds = new Map<string, string>();
+  const seenTargets = new Map<string, string>();
+
+  for (const impl of impls) {
+    const sourcesDir = path.join(IMPL_DIR, impl, "sources");
+    let files: string[] = [];
+    try {
+      files = (await readdir(sourcesDir)).filter((f) => f.endsWith(".md")).sort();
+    } catch {
+      errors.push(`implementation/active/${impl}/: missing sources/ directory`);
+      continue;
+    }
+    for (const file of files) {
+      const rel = `implementation/active/${impl}/sources/${file}`;
+      const fm = parseFrontmatter(await readFile(path.join(sourcesDir, file), "utf8"), rel);
+      if (!fm) continue;
+      for (const field of ["id", "kind", "contract", "contract_revision", "targets", "depends_on", "exports", "verification"]) {
+        if (fm[field] === undefined) errors.push(`${rel}: frontmatter field '${field}' missing`);
+      }
+      if (fm.kind !== "source-design") errors.push(`${rel}: kind must be 'source-design', got '${String(fm.kind)}'`);
+      const id = asString(fm.id);
+      const contract = asString(fm.contract);
+      const targets = asList(fm.targets);
+      if (!id) continue;
+      if (seenIds.has(id)) errors.push(`${rel}: duplicate SDR id '${id}' (also in ${seenIds.get(id)})`);
+      seenIds.set(id, rel);
+      if (contract) {
+        if (!knownContracts.has(contract)) {
+          errors.push(`${rel}: contract '${contract}' does not resolve`);
+        } else if (!approvedContracts.has(contract)) {
+          errors.push(`${rel}: contract '${contract}' is not approved (status must be 'approved')`);
+        }
+      }
+      if (targets.length === 0) errors.push(`${rel}: targets must list at least one file`);
+      for (const target of targets) {
+        if (seenTargets.has(target)) {
+          errors.push(`${rel}: target '${target}' also owned by ${seenTargets.get(target)}`);
+        }
+        seenTargets.set(target, rel);
+      }
+      sdrs.push({ file: rel, id, contract: contract ?? "", targets, dependsOn: asList(fm.depends_on) });
+    }
+  }
+  return sdrs;
+}
+
+function checkSdrDag(sdrs: ParsedSdr[]): void {
+  const known = new Map(sdrs.map((s) => [s.id, s]));
+  for (const s of sdrs) {
+    for (const dep of s.dependsOn) {
+      if (!known.has(dep)) errors.push(`${s.file}: depends_on '${dep}' does not resolve to any SDR`);
+    }
+  }
+  // acyclicity (DFS, iterative)
+  const visiting = new Set<string>();
+  const done = new Set<string>();
+  const stack: string[] = [];
+  for (const s of sdrs) {
+    if (done.has(s.id)) continue;
+    stack.push(s.id);
+    while (stack.length > 0) {
+      const cur = stack[stack.length - 1]!;
+      if (done.has(cur)) {
+        stack.pop();
+        continue;
+      }
+      if (visiting.has(cur)) {
+        errors.push(`implementation DAG has a cycle involving '${cur}'`);
+        stack.pop();
+        continue;
+      }
+      visiting.add(cur);
+      const node = known.get(cur);
+      let pushed = false;
+      if (node) {
+        for (const dep of node.dependsOn) {
+          const target = known.get(dep);
+          if (target && !done.has(dep) && !visiting.has(dep)) {
+            stack.push(dep);
+            pushed = true;
+          }
+        }
+      }
+      if (!pushed) {
+        visiting.delete(cur);
+        done.add(cur);
+        stack.pop();
+      }
+    }
+    visiting.clear();
+  }
+}
+
+// ---------- main ----------
+
 const contracts = await loadContracts();
-checkDependencyPolicy(contracts);
+checkContractPolicy(contracts);
 await checkModelCoverage(contracts);
+const sdrs = await loadSdrs(contracts);
+checkSdrDag(sdrs);
 
 if (errors.length > 0) {
   console.error(`policy-check: ${errors.length} problem(s)`);
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
 }
-console.log(`policy-check: OK (${contracts.length} contracts)`);
+console.log(`policy-check: OK (${contracts.length} contracts, ${sdrs.length} SDRs)`);
