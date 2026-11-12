@@ -1,0 +1,22 @@
+{
+  "name": "app-img-installer",
+  "version": "0.1.0",
+  "description": "Install and integrate AppImages into the desktop environment (entries, icons, menus)",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "app-img-installer": "./src/cli/main.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "bun test",
+    "verify": "just verify"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "eslint": "^9.20.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.24.0"
+  }
+}
