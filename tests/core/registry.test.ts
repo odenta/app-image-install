@@ -45,6 +45,15 @@ describe("core.registry listInstalled", () => {
     expect(r.value[0]?.appImagePath).toBe(path.join(paths.appsDir, "codium.appimage"));
   });
 
+  test("lists multiple apps sorted by name", async () => {
+    await installAppImage(await makeFixtureAppImage("valid", path.join(root, "codium.AppImage")), paths, {});
+    await installAppImage(await makeFixtureAppImage("no-icons", path.join(root, "foo.AppImage")), paths, {});
+    const r = await listInstalled(paths);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.map((a) => a.name)).toEqual(["Thing", "VSCodium"]);
+  });
+
   test("image without entry is listed by appId with null version", async () => {
     await Bun.write(path.join(paths.appsDir, "lonely.appimage"), "#!/bin/sh\n");
     const r = await listInstalled(paths);

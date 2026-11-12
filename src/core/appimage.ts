@@ -67,13 +67,19 @@ export async function inspectAppImage(
     }
 
     await rm(root, { recursive: true, force: true });
-    const proc = Bun.spawn([appImagePath, "--appimage-extract"], {
-      cwd: workDir,
-      stdout: "ignore",
-      stderr: "pipe",
-    });
-    const stderrText = await new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
+    let exitCode: number;
+    let stderrText: string;
+    try {
+      const proc = Bun.spawn([appImagePath, "--appimage-extract"], {
+        cwd: workDir,
+        stdout: "ignore",
+        stderr: "pipe",
+      });
+      stderrText = await new Response(proc.stderr).text();
+      exitCode = await proc.exited;
+    } catch (e) {
+      return err({ kind: "extract-failed", stderr: e instanceof Error ? e.message : String(e) });
+    }
     if (exitCode !== 0) {
       return err({ kind: "extract-failed", stderr: stderrText.trim().slice(-STDERR_LIMIT) });
     }

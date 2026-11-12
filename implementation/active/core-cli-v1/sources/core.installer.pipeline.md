@@ -29,9 +29,15 @@ warnings, and rollback, per contract `core.installer`.
 
 - `mkdtemp` workdir per call (under `os.tmpdir()`); `finally: rm -rf`.
 - Step order per contract: ensure paths → source exists → `inspectAppImage(source, workdir)` →
-  collision check (`appsDir/<appId>.appimage` exists && !force → `collision`; force → inline
-  cleanup of that appId's image/entry/icons) → copy (skip when source path === target path;
-  `fs.copyFile` then `chmod 0o755`) → build entry data:
+  collision check (`appsDir/<appId>.appimage` exists && !force → `collision`) →
+  force mode (**stage-then-swap**, per approved spec scenario "Failed forced install
+  preserves the previous install"): copy the new image to `appsDir/<appId>.appimage.stage`,
+  write the rendered entry to `<appId>.desktop.stage` (direct write, not `writeEntry`),
+  install icons to their normal hicolor paths (same appId, re-derivable from either image).
+  Only after all steps succeed: remove the old image/entry and rename the staged files into
+  place; on any failure before the swap, delete the staged files and leave the previous
+  install untouched. Non-force installs keep the simple copy + reverse-undo rollback.
+  → build entry data:
   - entry parsed → `renderDesktopEntry(entry, { exec: targetPath, icon: appId })`;
   - entry null → `fallbackEntry(appId, basename(source))` + warning "no embedded desktop entry;
     generated fallback";
@@ -66,8 +72,10 @@ warnings, and rollback, per contract `core.installer`.
 
 ## Design rationale
 
-Force-cleanup is inlined (not via `core.remove`) per the contract's open question: it keeps the
-installer dependency-light and avoids cross-module cycles; the duplication is two `rm` calls.
+Force mode uses stage-then-swap (approved spec scenario "Failed forced install preserves the
+previous install"): a failed forced install must never destroy the working app, and no `.bak`
+artifacts ever appear in storage. The stage files live beside the targets and are renamed into
+place only after every step succeeds.
 
 ## Open questions
 

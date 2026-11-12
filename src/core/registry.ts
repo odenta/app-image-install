@@ -93,7 +93,13 @@ async function reintegrate(appId: string, imagePath: string, paths: XdgPaths): P
     const written = await writeEntry(paths.applicationsDir, appId, rendered);
     if (!written.ok) return false;
     const icons = await installIcons(paths.iconThemeDir, appId, metadata.icons);
-    return icons.ok;
+    if (!icons.ok) {
+      // Do not leave a half-integrated app: the entry would make future syncs
+      // skip icon installation forever.
+      await removeEntry(paths.applicationsDir, appId);
+      return false;
+    }
+    return true;
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
@@ -116,7 +122,8 @@ export async function sync(paths: XdgPaths): Promise<Result<SyncReport, Registry
     const removed = await removeEntry(paths.applicationsDir, entry.id);
     if (!removed.ok) return removed;
     if (removed.value) {
-      await removeIcons(paths.iconThemeDir, entry.id);
+      const icons = await removeIcons(paths.iconThemeDir, entry.id);
+      if (!icons.ok) return icons;
       pruned.push(entry.id);
     }
   }

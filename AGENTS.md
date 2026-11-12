@@ -16,6 +16,9 @@ Development model: specification-driven, human-governed, AI-implemented (AI Engi
 ## Conventions
 
 - Public API changes start in the owning contract (keep status honest); code follows the contract, never the reverse.
+- Reviewer findings are proposals for the operator, not authority. Fixes that restore approved
+  L2/L3 semantics may proceed directly; anything behavioral goes architecture → spec →
+  blueprint → implement, with operator approval at each level.
 - Core modules return `Result<T, E>` (`core.result`); `throw` is for programmer errors only.
 - Dependency direction: fronts (`cli`, `gui`) → `core.*`. `core.*` never imports a front; `cli` and `gui` never import each other.
 - No new runtime dependency without operator approval.

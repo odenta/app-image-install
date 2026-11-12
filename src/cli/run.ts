@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { installAppImage } from "../core/installer.ts";
+import { installAppImage, type InstallError } from "../core/installer.ts";
 import { listInstalled, sync } from "../core/registry.ts";
 import { removeApp } from "../core/remove.ts";
+import { readEntry } from "../core/desktop.ts";
 import { ensurePaths, resolvePaths, type PathOverrides } from "../core/paths.ts";
-import type { InstallError } from "../core/installer.ts";
 
 export interface CliIO {
   readonly stdout: (text: string) => void;
@@ -88,10 +88,20 @@ async function cmdRemove(query: string, deps: CliDeps): Promise<number> {
 }
 
 async function cmdList(deps: CliDeps): Promise<number> {
-  const result = await listInstalled(resolvePaths(deps.paths));
+  const paths = resolvePaths(deps.paths);
+  const result = await listInstalled(paths);
   if (!result.ok) {
     deps.io.stderr(`error: ${result.error.op} failed on ${result.error.path}: ${result.error.cause}`);
     return 1;
+  }
+  if (result.value.length === 0) {
+    return 0; // contract: empty result prints nothing
+  }
+  for (const app of result.value) {
+    const entry = await readEntry(paths.applicationsDir, app.appId);
+    if (!entry.ok || entry.value === null) {
+      deps.io.stderr(`warning: ${app.appId}: desktop entry missing or unreadable; showing appId as name`);
+    }
   }
   const nameW = Math.max("NAME".length, ...result.value.map((a) => a.name.length));
   const verW = Math.max("VERSION".length, ...result.value.map((a) => (a.version ?? "").length));
@@ -115,28 +125,20 @@ async function cmdSync(deps: CliDeps): Promise<number> {
   if (result.value.pruned.length > 0) {
     deps.io.stdout(`pruned: ${result.value.pruned.join(", ")}`);
   }
-  const listed = await listInstalled(paths);
-  if (listed.ok && listed.value.length > result.value.regenerated.length) {
-    const integrated = new Set(result.value.regenerated);
-    const missing = listed.value.filter((a) => !integrated.has(a.appId)).map((a) => a.appId);
-    if (missing.length > 0) {
-      deps.io.stderr(`warning: some images could not be re-integrated: ${missing.join(", ")}`);
-    }
-  }
   return 0;
 }
 
-async function cmdGui(): Promise<number> {
+async function cmdGui(deps: CliDeps): Promise<number> {
   const guiEntry = resolveGuiEntry();
   if (guiEntry === null) {
-    console.error("error: GUI is not built in this wave");
+    deps.io.stderr("error: GUI is not built in this wave");
     return 1;
   }
   try {
     Bun.spawn(["bun", guiEntry], { stdio: ["ignore", "inherit", "inherit"] }).unref();
     return 0;
   } catch (e) {
-    console.error(`error: could not launch GUI: ${e instanceof Error ? e.message : String(e)}`);
+    deps.io.stderr(`error: could not launch GUI: ${e instanceof Error ? e.message : String(e)}`);
     return 1;
   }
 }
@@ -199,7 +201,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
         deps.io.stderr(`error: gui takes no arguments\n${USAGE}`);
         return 2;
       }
-      return cmdGui();
+      return cmdGui(deps);
     }
     default: {
       deps.io.stderr(`error: unknown command '${command}'\n${USAGE}`);

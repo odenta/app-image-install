@@ -43,6 +43,15 @@ describe("core.desktop parse/render", () => {
     expect(r.value.extra["Type"]).toBe("Application"); // unknown keys preserved verbatim
   });
 
+  test("duplicate keys keep the first occurrence", () => {
+    const r = parseDesktopEntry("x", "[Desktop Entry]\nName=First\nName=Second\nExec=a\nExec=b\n");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.name).toBe("First");
+      expect(r.value.exec).toBe("a");
+    }
+  });
+
   test("missing Name is a structured error", () => {
     const r = parseDesktopEntry("x", "[Desktop Entry]\nExec=foo\n");
     expect(r.ok).toBe(false);

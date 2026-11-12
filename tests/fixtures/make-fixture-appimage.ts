@@ -10,6 +10,8 @@ export type FixtureAppdir = "valid" | "no-desktop" | "no-icons";
 export interface FixtureOptions {
   /** Model an invalid AppImage: any invocation fails. */
   readonly garbage?: boolean;
+  /** Absolute path to an ad-hoc AppDir tree (overrides `appdir`). */
+  readonly customAppdir?: string;
 }
 
 export async function makeFixtureAppImage(
@@ -21,8 +23,8 @@ export async function makeFixtureAppImage(
   if (opts?.garbage) {
     script = "#!/bin/sh\necho 'not an appimage' >&2\nexit 1\n";
   } else {
-    if (appdir === null) throw new Error("programmer error: appdir required unless garbage");
-    const sourceDir = path.join(FIXTURES_ROOT, appdir);
+    const sourceDir = opts?.customAppdir ?? (appdir === null ? null : path.join(FIXTURES_ROOT, appdir));
+    if (sourceDir === null) throw new Error("programmer error: appdir or customAppdir required unless garbage");
     script = `#!/bin/sh
 case "$1" in
   --appimage-extract)

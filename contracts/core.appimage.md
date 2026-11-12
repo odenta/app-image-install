@@ -7,6 +7,7 @@ architecture: core.appimage
 dependencies:
   - core.result
   - core.desktop
+  - core.icons
 ---
 
 # AppImage reader

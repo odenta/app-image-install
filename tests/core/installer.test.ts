@@ -127,8 +127,59 @@ describe("core.installer", () => {
     expect(entryText).toContain("Icon=application-x-executable");
   });
 
-  test("garbage source: invalid-appimage, nothing installed", async () => {
-    const source = await makeFixtureAppImage(null, path.join(root, "garbage.AppImage"), { garbage: true });
+  test("force failure preserves the previous install (spec: failed forced install)", async () => {
+    // v1 install
+    const v1 = await makeFixtureAppImage("valid", path.join(root, "codium-1.2.3.AppImage"));
+    const first = await installAppImage(v1, paths, {});
+    expect(first.ok).toBe(true);
+    const imageBefore = await Bun.file(path.join(paths.appsDir, "codium.appimage")).text();
+    const entryBefore = await Bun.file(path.join(paths.applicationsDir, "codium.desktop")).text();
+
+    // v2 AppImage with a different embedded version, same appId
+    const { cp } = await import("node:fs/promises");
+    const v2dir = path.join(root, "v2appdir");
+    await cp(path.resolve(import.meta.dir, "../fixtures/appdirs/valid"), v2dir, { recursive: true });
+    const v2desktop = await Bun.file(path.join(v2dir, "codium.desktop")).text();
+    await Bun.write(path.join(v2dir, "codium.desktop"), v2desktop.replace("X-AppImage-Version=1.2.3", "X-AppImage-Version=9.9.9"));
+    const v2 = await makeFixtureAppImage(null, path.join(root, "codium-9.9.9.AppImage"), { customAppdir: v2dir });
+
+    // Inject a failure at icon installation: block the 64x64 target with a directory.
+    const blockedIcon = path.join(paths.iconThemeDir, "64x64", "apps", "codium.png");
+    await rm(blockedIcon, { force: true });
+    await mkdir(path.dirname(blockedIcon), { recursive: true });
+    await mkdir(blockedIcon);
+
+    const r = await installAppImage(v2, paths, { force: true });
+    expect(r.ok).toBe(false);
+
+    // Previous install preserved: image and entry unchanged, no stage files left.
+    expect(await Bun.file(path.join(paths.appsDir, "codium.appimage")).text()).toBe(imageBefore);
+    expect(await Bun.file(path.join(paths.applicationsDir, "codium.desktop")).text()).toBe(entryBefore);
+    expect(await Bun.file(path.join(paths.appsDir, "codium.appimage.stage")).exists()).toBe(false);
+    expect(await Bun.file(path.join(paths.applicationsDir, "codium.desktop.stage")).exists()).toBe(false);
+    // Unblocked old icons survived (64x64 was sacrificed to inject the failure).
+    expect(await Bun.file(path.join(paths.iconThemeDir, "48x48", "apps", "codium.png")).exists()).toBe(true);
+    expect(await Bun.file(path.join(paths.iconThemeDir, "256x256", "apps", "codium.png")).exists()).toBe(true);
+  });
+
+  test("force success swaps the install to the new version", async () => {
+    const v1 = await makeFixtureAppImage("valid", path.join(root, "codium-1.2.3.AppImage"));
+    expect((await installAppImage(v1, paths, {})).ok).toBe(true);
+    const { cp } = await import("node:fs/promises");
+    const v2dir = path.join(root, "v2appdir");
+    await cp(path.resolve(import.meta.dir, "../fixtures/appdirs/valid"), v2dir, { recursive: true });
+    const v2desktop = await Bun.file(path.join(v2dir, "codium.desktop")).text();
+    await Bun.write(path.join(v2dir, "codium.desktop"), v2desktop.replace("X-AppImage-Version=1.2.3", "X-AppImage-Version=9.9.9"));
+    const v2 = await makeFixtureAppImage(null, path.join(root, "codium-9.9.9.AppImage"), { customAppdir: v2dir });
+    const r = await installAppImage(v2, paths, { force: true });
+    expect(r.ok).toBe(true);
+    const entryText = await Bun.file(path.join(paths.applicationsDir, "codium.desktop")).text();
+    expect(entryText).toContain("X-AppImage-Version=9.9.9");
+    expect(await Bun.file(path.join(paths.appsDir, "codium.appimage.stage")).exists()).toBe(false);
+    expect(await Bun.file(path.join(paths.applicationsDir, "codium.desktop.stage")).exists()).toBe(false);
+  });
+
+  test("garbage source: invalid-appimage, nothing installed", async () => {    const source = await makeFixtureAppImage(null, path.join(root, "garbage.AppImage"), { garbage: true });
     const r = await installAppImage(source, paths, {});
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe("invalid-appimage");

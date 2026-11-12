@@ -69,6 +69,9 @@ Pipeline (all steps via core modules):
 - Success: image executable at storage, entry written with `Exec=` = image path, icons installed, caches refreshed; report complete.
 - Every warning in the report corresponds to a fallback actually taken.
 - No partial installs remain after an error result (rollback complete).
+- In `--force` mode, the new install is staged aside and only swapped in after every
+  step succeeds; if any step fails, the previous install's image, entry, and icons are
+  preserved unchanged.
 
 ## Invariants
 
@@ -97,6 +100,8 @@ Pipeline (all steps via core modules):
 - Collision without force errors and changes nothing; with force, previous artifacts are gone.
 - Failure injected after copy (e.g. unwritable applications dir) leaves the tree as before and keeps the source.
 - `--delete-source` leaves source intact on failure, removes it on success.
+- Force mode: inject a failure after staging (unwritable applications dir) while an old
+  install exists → old image, entry, and icons are byte-identical afterwards.
 
 ## Open questions
 

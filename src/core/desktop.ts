@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { err, ok, type Result } from "./result.ts";
 
@@ -45,6 +45,7 @@ export function parseDesktopEntry(id: string, text: string): Result<DesktopEntry
   let comment: string | null = null;
   let categories: readonly string[] = [];
   let terminal = false;
+  let sawTerminal = false;
   let version: string | null = null;
 
   for (const rawLine of text.split("\n")) {
@@ -62,7 +63,17 @@ export function parseDesktopEntry(id: string, text: string): Result<DesktopEntry
     const key = line.slice(0, eq).trim();
     const value = line.slice(eq + 1);
     const lower = key.toLowerCase();
-    if (KNOWN_KEYS.has(lower) && !(key in extra)) {
+    // First occurrence wins, for known and unknown keys alike.
+    if (KNOWN_KEYS.has(lower)) {
+      const alreadySeen =
+        (lower === "name" && name !== undefined) ||
+        (lower === "exec" && exec !== null) ||
+        (lower === "icon" && icon !== null) ||
+        (lower === "comment" && comment !== null) ||
+        (lower === "categories" && categories.length > 0) ||
+        (lower === "terminal" && sawTerminal) ||
+        (lower === "x-appimage-version" && version !== null);
+      if (alreadySeen) continue;
       switch (lower) {
         case "name":
           name = value;
@@ -81,6 +92,7 @@ export function parseDesktopEntry(id: string, text: string): Result<DesktopEntry
           break;
         case "terminal":
           terminal = value.trim().toLowerCase() === "true";
+          sawTerminal = true;
           break;
         case "x-appimage-version":
           version = value;
@@ -205,4 +217,3 @@ export async function listEntries(applicationsDir: string): Promise<Result<Deskt
   return ok(out);
 }
 
-export { mkdir as _mkdirForTests };

@@ -47,14 +47,16 @@ describe("cli end-to-end", () => {
     expect(out.some((l) => l.includes("VSCodium") && l.includes("1.2.3"))).toBe(true);
 
     out = [];
+    errOut = [];
     expect(await runCli(["sync"], deps())).toBe(0);
     expect(out).toEqual([]); // nothing regenerated or pruned
+    expect(errOut).toEqual([]); // no spurious warnings on a healthy install
 
     expect(await runCli(["remove", "codium"], deps())).toBe(0);
     expect(await Bun.file(path.join(paths.appsDir, "codium.appimage")).exists()).toBe(false);
     out = [];
     expect(await runCli(["list"], deps())).toBe(0);
-    expect(out.length).toBe(1); // header only
+    expect(out).toEqual([]); // contract: empty result prints nothing
   });
 
   test("exit codes: usage errors -> 2", async () => {
@@ -110,5 +112,13 @@ describe("cli end-to-end", () => {
   test("remove not-found -> 1", async () => {
     expect(await runCli(["remove", "nope"], deps())).toBe(1);
     expect(errOut.some((l) => l.includes("no installed app matches"))).toBe(true);
+  });
+
+  test("list warns on unreadable entry but still lists the app", async () => {
+    await Bun.write(path.join(paths.appsDir, "lonely.appimage"), "#!/bin/sh\n");
+    await Bun.write(path.join(paths.applicationsDir, "lonely.desktop"), "[Desktop Entry]\nExec=only-no-name\n");
+    expect(await runCli(["list"], deps())).toBe(0);
+    expect(out.some((l) => l.startsWith("lonely"))).toBe(true);
+    expect(errOut.some((l) => l.includes("warning: lonely"))).toBe(true);
   });
 });

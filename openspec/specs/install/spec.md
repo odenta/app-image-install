@@ -38,6 +38,11 @@ When the target image path already exists, the system SHALL refuse with a collis
 - **WHEN** the same install runs with `--force`
 - **THEN** the previous install's image, desktop entry, and icons are removed first, and the new install proceeds
 
+#### Scenario: Failed forced install preserves the previous install
+
+- **WHEN** `codium.appimage` is already installed and a forced install of a new `codium` AppImage fails at any point
+- **THEN** the previously installed image, desktop entry, and icons are still present and unchanged
+
 ### Requirement: Desktop integration
 
 The system SHALL write `~/.local/share/applications/<appId>.desktop` from the embedded desktop file (Name, Comment, Categories preserved; `Exec=` set to the installed image path), install extracted icons into `~/.local/share/icons/hicolor/<size>/apps/<appId>.<ext>`, and refresh icon and menu caches.

@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { inspectAppImage } from "./appimage.ts";
@@ -40,6 +40,37 @@ async function exists(p: string): Promise<boolean> {
 
 function isSafeAppId(appId: string): boolean {
   return appId !== "" && !appId.includes("/") && appId !== "." && appId !== ".." && path.basename(appId) === appId;
+}
+
+/** Copy hicolor/<size>/apps/<appId>.* into destDir/<size>/; returns whether anything was backed up. */
+async function backupIcons(themeDir: string, appId: string, destDir: string): Promise<boolean> {
+  let any = false;
+  const sizes = await readdir(themeDir).catch(() => [] as string[]);
+  for (const size of sizes) {
+    const appsDir = path.join(themeDir, size, "apps");
+    const files = await readdir(appsDir).catch(() => [] as string[]);
+    for (const file of files) {
+      if (file !== appId && !file.startsWith(`${appId}.`)) continue;
+      const dest = path.join(destDir, size, file);
+      await mkdir(path.dirname(dest), { recursive: true });
+      await copyFile(path.join(appsDir, file), dest);
+      any = true;
+    }
+  }
+  return any;
+}
+
+/** Restore icons previously saved by backupIcons. */
+async function restoreIcons(backupDir: string, themeDir: string): Promise<void> {
+  const sizes = await readdir(backupDir).catch(() => [] as string[]);
+  for (const size of sizes) {
+    const files = await readdir(path.join(backupDir, size)).catch(() => [] as string[]);
+    for (const file of files) {
+      const dest = path.join(themeDir, size, "apps", file);
+      await mkdir(path.dirname(dest), { recursive: true });
+      await copyFile(path.join(backupDir, size, file), dest);
+    }
+  }
 }
 
 export async function installAppImage(
@@ -90,29 +121,52 @@ export async function installAppImage(
     }
 
     const targetPath = path.join(paths.appsDir, `${appId}.appimage`);
+    const entryPath = path.join(paths.applicationsDir, `${appId}.desktop`);
     const sourceIsTarget = path.resolve(sourcePath) === path.resolve(targetPath);
+    const hasExisting = !sourceIsTarget && (await exists(targetPath));
 
-    if (!sourceIsTarget && (await exists(targetPath))) {
-      if (!opts.force) {
-        return err({ kind: "collision", appId, existingPath: targetPath });
-      }
-      await rm(targetPath, { force: true });
-      await rm(path.join(paths.applicationsDir, `${appId}.desktop`), { force: true });
-      await removeIcons(paths.iconThemeDir, appId);
+    if (hasExisting && opts.force !== true) {
+      return err({ kind: "collision", appId, existingPath: targetPath });
+    }
+
+    // Force mode (stage-then-swap, approved spec scenario): build the new install beside
+    // the old one and only swap after every step succeeds, so a failure leaves the
+    // previous install untouched and no partial state remains.
+    const staging = hasExisting;
+    const imageDest = staging ? `${targetPath}.stage` : targetPath;
+    const entryDest = staging ? `${entryPath}.stage` : entryPath;
+    const iconBackupDir = path.join(workDir, "icon-backup");
+    let iconsBackedUp = false;
+    let backupEntryText: string | null = null;
+
+    if (staging) {
+      iconsBackedUp = await backupIcons(paths.iconThemeDir, appId, iconBackupDir).catch(() => false);
+      backupEntryText = await readFile(entryPath, "utf8").catch(() => null);
+      // Pushed first => runs last in reverse rollback: clear the new artifacts, then
+      // restore the previous install's entry text and icons.
+      undo.push(async () => {
+        await rm(imageDest, { force: true });
+        await rm(entryDest, { force: true });
+        await rm(entryPath, { force: true });
+        if (backupEntryText !== null) {
+          await writeEntry(paths.applicationsDir, appId, backupEntryText).catch(() => {});
+        }
+        if (iconsBackedUp) await restoreIcons(iconBackupDir, paths.iconThemeDir).catch(() => {});
+      });
     }
 
     let copied = false;
     if (!sourceIsTarget) {
       try {
-        await copyFile(sourcePath, targetPath);
-        await chmod(targetPath, 0o755);
+        await copyFile(sourcePath, imageDest);
+        await chmod(imageDest, 0o755);
         copied = true;
         undo.push(async () => {
-          await rm(targetPath, { force: true });
+          await rm(imageDest, { force: true });
         });
       } catch (e) {
         await rollback();
-        return err(fsError("copy", targetPath, e));
+        return err(fsError("copy", imageDest, e));
       }
     }
 
@@ -130,14 +184,28 @@ export async function installAppImage(
     }
     const rendered = renderDesktopEntry(entryData, { exec: targetPath, icon: iconName });
 
-    const entryPath = path.join(paths.applicationsDir, `${appId}.desktop`);
-    const written = await writeEntry(paths.applicationsDir, appId, rendered);
+    let written: Result<void, { readonly kind: "fs"; readonly op: string; readonly path: string; readonly cause: string }>;
+    if (staging) {
+      try {
+        await writeFile(entryDest, rendered);
+        written = ok(undefined);
+      } catch (e) {
+        written = err({
+          kind: "fs",
+          op: "write-entry",
+          path: entryDest,
+          cause: e instanceof Error ? e.message : String(e),
+        });
+      }
+    } else {
+      written = await writeEntry(paths.applicationsDir, appId, rendered);
+    }
     if (!written.ok) {
       await rollback();
       return err(fsError(written.error.op, written.error.path, written.error.cause));
     }
     undo.push(async () => {
-      await rm(entryPath, { force: true });
+      await rm(entryDest, { force: true });
     });
 
     const iconsResult = await installIcons(paths.iconThemeDir, appId, metadata.icons);
@@ -146,11 +214,23 @@ export async function installAppImage(
       return err(fsError(iconsResult.error.op, iconsResult.error.path, iconsResult.error.cause));
     }
     const installedIcons = iconsResult.value;
-    if (installedIcons.length > 0) {
+    if (installedIcons.length > 0 && !staging) {
       const themeDir = paths.iconThemeDir;
       undo.push(async () => {
         await removeIcons(themeDir, appId);
       });
+    }
+
+    if (staging) {
+      try {
+        await rm(entryPath, { force: true });
+        await rename(entryDest, entryPath);
+        await rm(targetPath, { force: true });
+        await rename(imageDest, targetPath);
+      } catch (e) {
+        await rollback();
+        return err(fsError("force-swap", targetPath, e));
+      }
     }
 
     await refreshCaches();
