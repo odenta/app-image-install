@@ -2,7 +2,7 @@
 id: core.desktop
 kind: module-contract
 status: approved
-revision: 1
+revision: 2
 architecture: core.desktop
 dependencies:
   - core.result
@@ -26,7 +26,10 @@ export interface DesktopEntryData {
   readonly categories: readonly string[];           // Categories= split on ";"
   readonly terminal: boolean;                       // Terminal=, default false
   readonly version: string | null;                  // X-AppImage-Version=, null if absent
-  readonly extra: Readonly<Record<string, string>>; // all other keys, preserved verbatim
+  /** Non-[Desktop Entry] groups preserved verbatim (action groups etc.). */
+  readonly otherGroups: readonly { readonly name: string; readonly lines: readonly string[] }[];
+  /** All other keys, verbatim (including locale-suffixed variants). */
+  readonly extra: Readonly<Record<string, string>>;
 }
 
 export type DesktopParseError =
@@ -34,6 +37,11 @@ export type DesktopParseError =
   | { readonly kind: "missing-name"; readonly id: string };
 
 export function parseDesktopEntry(id: string, text: string): Result<DesktopEntryData, DesktopParseError>;
+// Known keys: Name (required), Exec, Icon, Comment, Categories, Terminal,
+// X-AppImage-Version, Type (consumed: renderer owns Type=Application; never stored in extra).
+// Duplicate keys keep the first occurrence. All keys inside [Desktop Entry] not listed above
+// land in `extra`. Groups other than [Desktop Entry] are preserved verbatim in otherGroups
+// (never interpreted).
 
 export interface EntryOverrides {
   readonly exec: string;   // installed image path
@@ -54,7 +62,7 @@ export function removeEntry(applicationsDir: string, id: string): Promise<Result
 export function listEntries(applicationsDir: string): Promise<Result<DesktopEntryData[], EntryFsError>>;
 ```
 
-`renderDesktopEntry` emits a `[Desktop Entry]` group with `Type=Application`, preserved `Name`, `Comment`, `Categories`, `Terminal`, all `extra` keys, then `Exec` and `Icon` from overrides (overrides win over parsed values). Ends with a trailing newline.
+`renderDesktopEntry` emits a `[Desktop Entry]` group with `Type=Application`, preserved `Name`, `Comment`, `Categories`, `Terminal`, all `extra` keys, then `Exec` and `Icon` from overrides (overrides win over parsed values), then each of `otherGroups` verbatim (`[name]` + its lines). Ends with a trailing newline.
 
 ## Preconditions
 

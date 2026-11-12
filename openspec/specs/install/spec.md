@@ -52,6 +52,11 @@ The system SHALL write `~/.local/share/applications/<appId>.desktop` from the em
 - **WHEN** install of an AppImage with embedded `codium.desktop` and PNG icons completes
 - **THEN** the desktop entry exists with `Exec=` pointing at `~/.local/Apps/codium.appimage`, icons exist under hicolor, and the app appears in the desktop menu after cache refresh
 
+#### Scenario: Entry with action groups stays menu-valid
+
+- **WHEN** the embedded desktop file declares `Actions=` with matching `[Desktop Action …]` groups
+- **THEN** the rendered entry preserves those groups verbatim, contains no duplicate `Type` key, and passes `desktop-file-validate`
+
 ### Requirement: Fallback entry and icon
 
 If the AppImage has no embedded desktop file, the system SHALL generate a minimal entry (Name derived from the filename) and use a generic icon, reporting a warning for each fallback taken.

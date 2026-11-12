@@ -40,7 +40,41 @@ describe("core.desktop parse/render", () => {
     expect(r.value.version).toBe("1.2.3");
     expect(r.value.extra["Name[de]"]).toBe("VSCodium DE");
     expect(r.value.extra["X-Custom-Flag"]).toBe("yes");
-    expect(r.value.extra["Type"]).toBe("Application"); // unknown keys preserved verbatim
+    expect(r.value.extra["Type"]).toBeUndefined(); // Type is consumed by the parser
+    expect(r.value.otherGroups).toEqual([]);
+  });
+
+  test("action groups survive round-trip; no duplicate Type (smoke-test finding)", () => {
+    const withActions = `[Desktop Entry]
+Type=Application
+Name=VSCodium
+Exec=codium
+Icon=codium
+Actions=new-empty-window;
+X-AppImage-Version=1.2.3
+
+[Desktop Action new-empty-window]
+Name=New Empty Window
+Exec=codium --new-window
+Icon=codium
+`;
+    const parsed = parseDesktopEntry("codium", withActions);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.otherGroups.length).toBe(1);
+    expect(parsed.value.otherGroups[0]?.name).toBe("Desktop Action new-empty-window");
+    const rendered = renderDesktopEntry(parsed.value, { exec: "/opt/codium.appimage", icon: "codium" });
+    expect(rendered.match(/Type=/g)?.length).toBe(1);
+    expect(rendered).toContain("[Desktop Action new-empty-window]");
+    const again = parseDesktopEntry("codium", rendered);
+    expect(again.ok).toBe(true);
+    if (again.ok) {
+      expect(again.value.otherGroups[0]?.lines).toEqual([
+        "Name=New Empty Window",
+        "Exec=codium --new-window",
+        "Icon=codium",
+      ]);
+    }
   });
 
   test("duplicate keys keep the first occurrence", () => {

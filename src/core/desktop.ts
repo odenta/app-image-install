@@ -12,6 +12,8 @@ export interface DesktopEntryData {
   readonly categories: readonly string[];
   readonly terminal: boolean;
   readonly version: string | null;
+  /** Non-[Desktop Entry] groups preserved verbatim (action groups etc.). */
+  readonly otherGroups: readonly { readonly name: string; readonly lines: readonly string[] }[];
   /** All other keys, verbatim (including locale-suffixed variants). */
   readonly extra: Readonly<Record<string, string>>;
 }
@@ -27,7 +29,16 @@ export type EntryFsError = {
   readonly cause: string;
 };
 
-const KNOWN_KEYS = new Set(["name", "exec", "icon", "comment", "categories", "terminal", "x-appimage-version"]);
+const KNOWN_KEYS = new Set([
+  "type",
+  "name",
+  "exec",
+  "icon",
+  "comment",
+  "categories",
+  "terminal",
+  "x-appimage-version",
+]);
 
 function assertSafeId(id: string): void {
   if (id === "" || id.includes("/") || id === "." || id === ".." || path.basename(id) !== id) {
@@ -35,81 +46,108 @@ function assertSafeId(id: string): void {
   }
 }
 
+interface MutableGroup {
+  name: string;
+  lines: string[];
+}
+
 export function parseDesktopEntry(id: string, text: string): Result<DesktopEntryData, DesktopParseError> {
-  let inDesktopEntry = false;
-  let sawGroup = false;
+  const groups: MutableGroup[] = [];
+  let current: MutableGroup | null = null;
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trimEnd();
+    if (line === "" || line.startsWith("#")) continue;
+    const group = /^\[(.+)\]$/.exec(line);
+    if (group && group[1] !== undefined) {
+      current = { name: group[1], lines: [] };
+      groups.push(current);
+      continue;
+    }
+    current?.lines.push(line);
+  }
+
+  const main = groups.find((g) => g.name === "Desktop Entry") ?? null;
+  const otherGroups = groups.filter((g) => g.name !== "Desktop Entry");
+
   const extra: Record<string, string> = {};
   let name: string | undefined;
   let exec: string | null = null;
   let icon: string | null = null;
   let comment: string | null = null;
   let categories: readonly string[] = [];
+  let sawCategories = false;
   let terminal = false;
   let sawTerminal = false;
   let version: string | null = null;
 
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trimEnd();
-    if (line === "" || line.startsWith("#")) continue;
-    const group = /^\[(.+)\]$/.exec(line);
-    if (group && group[1] !== undefined) {
-      sawGroup = true;
-      inDesktopEntry = group[1] === "Desktop Entry";
-      continue;
-    }
-    if (!inDesktopEntry) continue;
-    const eq = line.indexOf("=");
-    if (eq <= 0) continue;
-    const key = line.slice(0, eq).trim();
-    const value = line.slice(eq + 1);
-    const lower = key.toLowerCase();
-    // First occurrence wins, for known and unknown keys alike.
-    if (KNOWN_KEYS.has(lower)) {
-      const alreadySeen =
-        (lower === "name" && name !== undefined) ||
-        (lower === "exec" && exec !== null) ||
-        (lower === "icon" && icon !== null) ||
-        (lower === "comment" && comment !== null) ||
-        (lower === "categories" && categories.length > 0) ||
-        (lower === "terminal" && sawTerminal) ||
-        (lower === "x-appimage-version" && version !== null);
-      if (alreadySeen) continue;
-      switch (lower) {
-        case "name":
-          name = value;
-          break;
-        case "exec":
-          exec = value;
-          break;
-        case "icon":
-          icon = value;
-          break;
-        case "comment":
-          comment = value;
-          break;
-        case "categories":
-          categories = value.split(";").map((s) => s.trim()).filter((s) => s !== "");
-          break;
-        case "terminal":
-          terminal = value.trim().toLowerCase() === "true";
-          sawTerminal = true;
-          break;
-        case "x-appimage-version":
-          version = value;
-          break;
+  if (main !== null) {
+    for (const line of main.lines) {
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      const value = line.slice(eq + 1);
+      const lower = key.toLowerCase();
+      // First occurrence wins, for known and unknown keys alike.
+      if (KNOWN_KEYS.has(lower)) {
+        if (lower === "type") continue; // consumed: renderer owns Type=Application
+        const alreadySeen =
+          (lower === "name" && name !== undefined) ||
+          (lower === "exec" && exec !== null) ||
+          (lower === "icon" && icon !== null) ||
+          (lower === "comment" && comment !== null) ||
+          (lower === "categories" && sawCategories) ||
+          (lower === "terminal" && sawTerminal) ||
+          (lower === "x-appimage-version" && version !== null);
+        if (alreadySeen) continue;
+        switch (lower) {
+          case "name":
+            name = value;
+            break;
+          case "exec":
+            exec = value;
+            break;
+          case "icon":
+            icon = value;
+            break;
+          case "comment":
+            comment = value;
+            break;
+          case "categories":
+            categories = value.split(";").map((s) => s.trim()).filter((s) => s !== "");
+            sawCategories = true;
+            break;
+          case "terminal":
+            terminal = value.trim().toLowerCase() === "true";
+            sawTerminal = true;
+            break;
+          case "x-appimage-version":
+            version = value;
+            break;
+        }
+        continue;
       }
-      continue;
+      if (!(key in extra)) extra[key] = value;
     }
-    if (!(key in extra)) extra[key] = value;
   }
 
-  if (!sawGroup || (name === undefined && Object.keys(extra).length === 0 && exec === null && icon === null)) {
+  if (main === null || main.lines.length === 0) {
     return err({ kind: "empty-entry" });
   }
   if (name === undefined || name.trim() === "") {
     return err({ kind: "missing-name", id });
   }
-  return ok({ id, name, exec, icon, comment, categories, terminal, version, extra });
+  return ok({
+    id,
+    name,
+    exec,
+    icon,
+    comment,
+    categories,
+    terminal,
+    version,
+    otherGroups: otherGroups.map((g) => ({ name: g.name, lines: [...g.lines] })),
+    extra,
+  });
 }
 
 export interface EntryOverrides {
@@ -131,6 +169,10 @@ export function renderDesktopEntry(data: DesktopEntryData, overrides: EntryOverr
     lines.push(`${key}=${data.extra[key]}`);
   }
   if (data.version !== null) lines.push(`X-AppImage-Version=${data.version}`);
+  for (const group of data.otherGroups) {
+    lines.push(`[${group.name}]`);
+    for (const line of group.lines) lines.push(line);
+  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -147,6 +189,7 @@ export function fallbackEntry(appId: string, sourceFileName: string): DesktopEnt
     categories: [],
     terminal: false,
     version: null,
+    otherGroups: [],
     extra: {},
   };
 }
@@ -169,7 +212,7 @@ export async function readEntry(
   try {
     text = await readFile(p, "utf8");
   } catch (e) {
-    if (e instanceof Error && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT") return ok(null);
+    if (e instanceof Error && "code" in e && e.code === "ENOENT") return ok(null);
     return err(fsError("read", p, e));
   }
   return parseDesktopEntry(id, text);
@@ -194,7 +237,7 @@ export async function removeEntry(applicationsDir: string, id: string): Promise<
     await rm(p);
     return ok(true);
   } catch (e) {
-    if (e instanceof Error && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT") return ok(false);
+    if (e instanceof Error && "code" in e && e.code === "ENOENT") return ok(false);
     return err(fsError("remove", p, e));
   }
 }
@@ -204,7 +247,7 @@ export async function listEntries(applicationsDir: string): Promise<Result<Deskt
   try {
     files = (await readdir(applicationsDir)).filter((f) => f.endsWith(".desktop")).sort();
   } catch (e) {
-    if (e instanceof Error && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT") return ok([]);
+    if (e instanceof Error && "code" in e && e.code === "ENOENT") return ok([]);
     return err(fsError("list", applicationsDir, e));
   }
   const out: DesktopEntryData[] = [];
@@ -216,4 +259,3 @@ export async function listEntries(applicationsDir: string): Promise<Result<Deskt
   }
   return ok(out);
 }
-
