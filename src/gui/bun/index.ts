@@ -17,7 +17,16 @@ function toDto(app: InstalledApp): AppDto {
 function coreError(e: { kind: string } & Record<string, unknown>): string {
   if (e.kind === "fs") return `${e.op} failed on ${e.path}: ${e.cause}`;
   if (e.kind === "not-found") return "no installed app matches";
+  if (e.kind === "source-not-found") return `file not found: ${e.path}`;
+  if (e.kind === "invalid-appimage") return `not a usable AppImage: ${e.cause}`;
+  if (e.kind === "collision") return `'${e.appId}' is already installed; use --force to replace`;
   return e.kind;
+}
+
+// Same rules as core.installer's isSafeAppId: the webview-supplied appId must never
+// escape the storage directory (approved gui contract: no process capability via RPC).
+function isSafeAppId(appId: string): boolean {
+  return appId !== "" && !appId.includes("/") && appId !== "." && appId !== ".." && !appId.includes("\\");
 }
 
 const rpc = BrowserView.defineRPC<GuiSchema>({
@@ -62,7 +71,13 @@ const rpc = BrowserView.defineRPC<GuiSchema>({
       },
 
       launchApp: async ({ appId }) => {
-        const imagePath = path.join(paths.appsDir, `${appId}.appimage`);
+        if (!isSafeAppId(appId)) {
+          throw new Error(`invalid app id '${appId}'`);
+        }
+        const imagePath = path.resolve(paths.appsDir, `${appId}.appimage`);
+        if (!imagePath.startsWith(path.resolve(paths.appsDir) + path.sep)) {
+          throw new Error(`invalid app id '${appId}'`);
+        }
         try {
           Bun.spawn([imagePath], { stdio: ["ignore", "ignore", "ignore"] }).unref();
         } catch (e) {
