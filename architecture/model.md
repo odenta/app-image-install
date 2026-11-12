@@ -1,6 +1,6 @@
 # Architecture Model — app-img-installer
 
-Level: L1 (design graph). Status: **draft** — pending operator approval.
+Level: L1 (design graph). Status: **approved** (gate 1).
 Plain-Markdown design graph (LikeC4 intentionally omitted at this scale, per workflow spec §4.1).
 
 ## Components

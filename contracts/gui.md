@@ -1,7 +1,7 @@
 ---
 id: gui
 kind: module-contract
-status: draft
+status: approved
 revision: 1
 architecture: gui
 dependencies:

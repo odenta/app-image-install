@@ -1,7 +1,7 @@
 ---
 id: core.appimage
 kind: module-contract
-status: draft
+status: approved
 revision: 1
 architecture: core.appimage
 dependencies:

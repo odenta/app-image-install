@@ -1,7 +1,7 @@
 ---
 id: core.installer
 kind: module-contract
-status: draft
+status: approved
 revision: 1
 architecture: core.installer
 dependencies:
