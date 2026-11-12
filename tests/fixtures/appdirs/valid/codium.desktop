@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=VSCodium
+Name[de]=VSCodium DE
+Comment=Code editing. Redefined.
+Exec=codium
+Icon=codium
+Categories=Development;IDE;
+Terminal=false
+X-AppImage-Version=1.2.3

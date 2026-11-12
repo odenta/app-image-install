@@ -46,7 +46,7 @@ export function fallbackEntry(appId: string, sourceFileName: string): DesktopEnt
 
 export type EntryFsError = { readonly kind: "fs"; readonly op: string; readonly path: string; readonly cause: string };
 
-export function readEntry(applicationsDir: string, id: string): Promise<Result<DesktopEntryData | null, EntryFsError>>;
+export function readEntry(applicationsDir: string, id: string): Promise<Result<DesktopEntryData | null, EntryFsError | DesktopParseError>>;
 // null = file absent. Unparseable file => ok(null) + caller warning? No: unparseable => err(missing-name/empty-entry)? Spec: list treats unparseable as warning + fallback name; readEntry returns parse errors as error value.
 
 export function writeEntry(applicationsDir: string, id: string, rendered: string): Promise<Result<void, EntryFsError>>;
