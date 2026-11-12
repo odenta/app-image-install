@@ -1,4 +1,4 @@
-import { chmod, readdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { err, ok, type Result } from "./result.ts";
 import { parseDesktopEntry, type DesktopEntryData } from "./desktop.ts";
@@ -133,11 +133,23 @@ export async function inspectAppImage(
       candidates.push({ abs, rel, priority, size });
     }
     candidates.sort((a, b) => a.priority - b.priority || b.size - a.size || a.rel.localeCompare(b.rel));
-    const icons: ExtractedIcon[] = candidates.map((c) => ({
-      absPath: c.abs,
-      relPath: c.rel,
-      ext: normalizeIconExt(c.abs) ?? ".png",
-    }));
+    // Copy candidates out of squashfs-root before it is removed: callers install
+    // icons after this function returns, when workDir/squashfs-root no longer exists.
+    const iconStageDir = path.join(workDir, "extracted-icons");
+    const icons: ExtractedIcon[] = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i]!;
+      const ext = normalizeIconExt(c.abs) ?? ".png";
+      // Per-index subdirectory keeps the original basename (e.g. ".DirIcon") intact.
+      const stagedAbs = path.join(iconStageDir, String(i).padStart(3, "0"), path.basename(c.rel));
+      try {
+        await mkdir(path.dirname(stagedAbs), { recursive: true });
+        await copyFile(c.abs, stagedAbs);
+      } catch {
+        continue; // unreadable icon file: skip rather than fail the whole inspection
+      }
+      icons.push({ absPath: stagedAbs, relPath: c.rel, ext });
+    }
 
     const entryId = entry?.id ?? stripExtension(path.basename(appImagePath));
     return ok({ entry, entryId, rawEntryText, icons });

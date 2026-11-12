@@ -1,6 +1,6 @@
 // Fixture AppImages for tests: executable shell scripts honouring --appimage-extract.
 // See implementation/active/core-cli-v1/sources/testsupport.fixtures.md.
-import { chmod, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const FIXTURES_ROOT = path.resolve(import.meta.dir, "appdirs");
@@ -36,6 +36,7 @@ case "$1" in
 esac
 `;
   }
+  await mkdir(path.dirname(destPath), { recursive: true });
   await writeFile(destPath, script, { mode: 0o755 });
   await chmod(destPath, 0o755);
   return destPath;
