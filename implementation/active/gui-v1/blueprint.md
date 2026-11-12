@@ -22,9 +22,20 @@ smoke test (VSCodium, commit-era tag implementation/core-cli-v1).
 
 ## Source DAG
 
-`core.desktop.groups` (independent of GUI) ← `gui.main` ← `gui.view`; `gui.config` independent.
-`gui.main` depends on approved core modules only (registry/installer/remove/paths/result).
-No core module changes beyond the approved `core.desktop` revision.
+Within this wave: `core.desktop.groups` ← `gui.main` ← `gui.view`; `gui.config` independent.
+`gui.main`'s substantive dependencies are the **already-implemented** core modules (tag
+`implementation/core-cli-v1`), recorded in its SDR as `uses_implemented`:
+
+```
+gui.view
+  -> gui.main --uses_implemented--> core.installer, core.registry, core.remove,
+                                    core.paths, core.result
+  -> core.desktop.groups (this wave's only core source change)
+```
+
+RPC-to-core mapping (approved `gui` contract): `listApps`→`core.registry.listInstalled`,
+`addApps`→`core.installer.installAppImage`, `removeApp`→`core.remove.removeApp`,
+`launchApp`→spawn stored image. `gui.main` imports no other integration logic.
 
 ## Execution order (tasks.yaml)
 

@@ -146,6 +146,7 @@ interface ParsedSdr {
   contract: string;
   targets: string[];
   dependsOn: string[];
+  usesImplemented: string[];
 }
 
 async function loadSdrs(contracts: ParsedContract[]): Promise<ParsedSdr[]> {
@@ -200,17 +201,29 @@ async function loadSdrs(contracts: ParsedContract[]): Promise<ParsedSdr[]> {
         }
         seenTargets.set(target, rel);
       }
-      sdrs.push({ file: rel, id, contract: contract ?? "", targets, dependsOn: asList(fm.depends_on) });
+      sdrs.push({
+        file: rel,
+        id,
+        contract: contract ?? "",
+        targets,
+        dependsOn: asList(fm.depends_on),
+        usesImplemented: asList(fm.uses_implemented),
+      });
     }
   }
   return sdrs;
 }
 
-function checkSdrDag(sdrs: ParsedSdr[]): void {
+function checkSdrDag(sdrs: ParsedSdr[], approvedContracts: Set<string>): void {
   const known = new Map(sdrs.map((s) => [s.id, s]));
   for (const s of sdrs) {
     for (const dep of s.dependsOn) {
       if (!known.has(dep)) errors.push(`${s.file}: depends_on '${dep}' does not resolve to any SDR`);
+    }
+    for (const dep of s.usesImplemented) {
+      if (!approvedContracts.has(dep)) {
+        errors.push(`${s.file}: uses_implemented '${dep}' does not resolve to an approved contract`);
+      }
     }
   }
   // three-color DFS (white/gray/black); gray target = back edge = cycle
@@ -246,7 +259,7 @@ const contracts = await loadContracts();
 checkContractPolicy(contracts);
 await checkModelCoverage(contracts);
 const sdrs = await loadSdrs(contracts);
-checkSdrDag(sdrs);
+checkSdrDag(sdrs, new Set(contracts.filter((c) => c.status === "approved").map((c) => c.id)));
 
 if (errors.length > 0) {
   console.error(`policy-check: ${errors.length} problem(s)`);

@@ -8,6 +8,14 @@ targets:
 depends_on:
   - gui.config
   - core.desktop.groups
+# Implemented dependencies (built in wave core-cli-v1, archived at tag
+# implementation/core-cli-v1): the "real meat" this front delegates to.
+uses_implemented:
+  - core.result
+  - core.paths
+  - core.installer
+  - core.registry
+  - core.remove
 exports: []
 verification:
   - just check
